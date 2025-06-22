@@ -1,0 +1,8 @@
+env
+__pycache__
+static
+testing_images
+preprocessed_mrz_0.jpg
+preprocessed_mrz_90.jpg
+preprocessed_mrz_180.jpg
+preprocessed_mrz_270.jpg
