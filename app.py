@@ -32,7 +32,7 @@ def verify_faces():
         }), 400
 
     files = request.files.getlist('images')
-    print('wow')
+    
     if len(files) < 2:
         return jsonify({
             'success': False,
@@ -48,12 +48,12 @@ def verify_faces():
             filename = f"{uuid.uuid4().hex}.{file.filename.rsplit('.', 1)[1].lower()}"
             file_path = save_uploaded_file(file, filename)
             saved_paths.append(file_path)
-        print('wow2')
+        
         # Verify faces
         verifier = FaceVerifier()
-        print('wow3')
+        
         is_same_person = verifier.verify_faces(saved_paths)
-        print('wow4')
+        
         
         return jsonify({
             'result': is_same_person,

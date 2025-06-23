@@ -33,7 +33,7 @@ class FaceVerifier:
                 else:
                     logger.error(f"Unsupported file: {img_path}")
                     return False
-            print('wow5')
+                
             # Generate all unique pairs
             n = len(processed_images)
             pairs = []
@@ -61,7 +61,7 @@ class FaceVerifier:
 
     def _run_parallel_verification(self, pairs: List[Tuple[str, str]], model_name: str, threshold: float) -> List[bool]:
         """Runs face verification for all image pairs in parallel."""
-        print('parallel')
+        
         with ProcessPoolExecutor() as executor:
             futures = [
                 executor.submit(self._compare_pair, img1, img2, model_name, threshold)
@@ -80,20 +80,17 @@ class FaceVerifier:
 
     @staticmethod
     def _compare_pair(img1: str, img2: str, model_name: str, threshold: float) -> bool:
-        print('c1')
+        
         """Compare a single pair of images."""
         logger = logging.getLogger(__name__)
         logger.info(f"Comparing {img1} and {img2}")
 
         try:
-            print('emb1')
+            
             emb1 = DeepFace.represent(img_path=img1, model_name=model_name, enforce_detection=False)
-            print('emb2')
             emb2 = DeepFace.represent(img_path=img2, model_name=model_name, enforce_detection=False)
-            print('emb3')
             dist = np.linalg.norm(np.array(emb1[0]["embedding"]) - np.array(emb2[0]["embedding"]))
             logger.info(f"Distance between {img1} and {img2}: {dist:.2f}")
-            print('c2')
             return dist <= threshold
 
         except Exception as e:
