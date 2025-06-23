@@ -67,9 +67,3 @@ class LiveVideo:
         return left_movement and right_movement
 
 
-lv =LiveVideo()
-
-# Example usage
-video_path = "testing_images/hadilive4.mp4"
-is_live = lv.detect_head_movement(video_path)
-print("Live video detected" if is_live else "No significant head movement detected")

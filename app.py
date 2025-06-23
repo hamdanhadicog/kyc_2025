@@ -7,6 +7,8 @@ from FaceVerification import FaceVerifier
 from ocr_passport import process_passport
 import logging
 from LiveVideo import LiveVideo
+from ocr_id import OcrId  # Make sure this matches the filename and class
+
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -30,6 +32,7 @@ def verify_faces():
         }), 400
 
     files = request.files.getlist('images')
+    print('wow')
     if len(files) < 2:
         return jsonify({
             'success': False,
@@ -45,10 +48,12 @@ def verify_faces():
             filename = f"{uuid.uuid4().hex}.{file.filename.rsplit('.', 1)[1].lower()}"
             file_path = save_uploaded_file(file, filename)
             saved_paths.append(file_path)
-
+        print('wow2')
         # Verify faces
         verifier = FaceVerifier()
+        print('wow3')
         is_same_person = verifier.verify_faces(saved_paths)
+        print('wow4')
         
         return jsonify({
             'result': is_same_person,
@@ -61,6 +66,7 @@ def verify_faces():
         }), 500
     finally:
         # Clean up uploaded files
+        
         cleanup_temp_files(saved_paths)
 
 @app.route('/extract_passport', methods=['POST'])
@@ -152,6 +158,58 @@ def check_liveness():
             'success': False,
             'error': RESPONSE_MESSAGES['LIVENESS_FAILED'] + f": {str(e)}"
         }), 500
+    finally:
+        # Clean up uploaded file
+        if 'file_path' in locals():
+            cleanup_temp_files([file_path])
+
+@app.route('/extract_id_name', methods=['POST'])
+def extract_id_name():
+    """
+    Endpoint to extract name from ID image using OCR
+    Expected payload: {'id_image': image_file}
+    Returns JSON with extracted name
+    """
+    if 'id_image' not in request.files:
+        return jsonify({
+            'success': False,
+            'error': RESPONSE_MESSAGES['MISSING_FILE'].format('id_image')
+        }), 400
+
+    file = request.files['id_image']
+    if file.filename == '' or not allowed_file(file.filename):
+        return jsonify({
+            'success': False,
+            'error': 'Invalid file'
+        }), 400
+
+    try:
+        # Save uploaded file
+        filename = f"{uuid.uuid4().hex}.{file.filename.rsplit('.', 1)[1].lower()}"
+        file_path = save_uploaded_file(file, filename)
+
+        # Extract name using OCR
+        ocr_id = OcrId()
+        extracted_name = ocr_id.extract_name_from_image(file_path)
+
+        if not extracted_name:
+            return jsonify({
+                'success': False,
+                'error': 'Name not found in the image'
+            }), 400
+
+        return jsonify({
+            'success': True,
+            'name': extracted_name
+        })
+
+    except Exception as e:
+        logger.error(f"ID OCR extraction error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': RESPONSE_MESSAGES['EXTRACTION_ERROR'].format(str(e))
+        }), 500
+
     finally:
         # Clean up uploaded file
         if 'file_path' in locals():

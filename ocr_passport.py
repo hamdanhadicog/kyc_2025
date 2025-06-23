@@ -462,7 +462,7 @@ def preprocess_mrz_region(image_path):
         logger.error("❌ Could not read the image for preprocessing.")
         return image_path
     reader = easyocr.Reader(['en'])
-    for angle in [0, 90, 180, 270]:
+    for angle in [0,90,180,270]:
         rotated = rotate_image(img, angle)
         h = rotated.shape[0]
         # Crop the bottom 20% (or adjust as needed for your MRZ location)
