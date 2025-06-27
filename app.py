@@ -21,53 +21,89 @@ logger = logging.getLogger(__name__)
 @app.route('/verify_faces', methods=['POST'])
 def verify_faces():
     """
-    Endpoint to verify if multiple images belong to the same person
-    Expected payload: {'images': [image1, image2, ...]}
-    Returns JSON with verification result and confidence
+    Endpoint to verify if ID, Passport, Selfie are of the same person,
+    and also check if the provided video is live.
+
+    Expected form-data fields:
+        - id_image
+        - passport_image
+        - selfie_image
+        - video
     """
-    if 'images' not in request.files:
+
+    # Define required fields
+    required_files = ['id_image', 'passport_image', 'selfie_image', 'video']
+    received_files = request.files
+
+    # Validate presence of all required files
+    missing_files = [field for field in required_files if field not in received_files]
+    if missing_files:
         return jsonify({
             'success': False,
-            'error': RESPONSE_MESSAGES['MISSING_FILE'].format('images')
+            'error': RESPONSE_MESSAGES['MISSING_FILE'].format(', '.join(missing_files))
         }), 400
 
-    files = request.files.getlist('images')
-    
-    if len(files) < 2:
-        return jsonify({
-            'success': False,
-            'error': 'At least two images are required for verification'
-        }), 400
-
-    saved_paths = []
+    saved_paths = {}
     try:
-        # Save all uploaded images
-        for file in files:
+        # Save each file individually
+        for field_name in required_files:
+            file = received_files[field_name]
             if file.filename == '' or not allowed_file(file.filename):
-                continue
-            filename = f"{uuid.uuid4().hex}.{file.filename.rsplit('.', 1)[1].lower()}"
+                return jsonify({
+                    'success': False,
+                    'error': f"Invalid file for {field_name}"
+                }), 400
+
+            ext = file.filename.rsplit('.', 1)[1].lower()
+            filename = f"{uuid.uuid4().hex}.{ext}"
             file_path = save_uploaded_file(file, filename)
-            saved_paths.append(file_path)
-        
-        # Verify faces
+            saved_paths[field_name] = file_path
+
+        # Step 1: Face Verification
         verifier = FaceVerifier()
-        
-        is_same_person = verifier.verify_faces(saved_paths)
-        
-        
+        face_result = verifier.verify_faces(
+            id_image=saved_paths['id_image'],
+            passport_image=saved_paths['passport_image'],
+            selfie_image=saved_paths['selfie_image']
+        )
+
+        if 'error' in face_result:
+            return jsonify({
+                'success': False,
+                'error': f"Face verification failed: {face_result['error']}"
+            }), 500
+
+        # Step 2: Liveness Check on Video
+        lv = LiveVideo()
+        video_path = saved_paths['video']
+        is_live = lv.detect_head_movement(video_path)
+
+        # Construct final result
         return jsonify({
-            'result': is_same_person,
+            'success': True,
+            'all_documents_match': face_result['all_match'],
+            'liveness_verified': is_live,
+            'face_verification_details': {
+                'match_id_selfie': face_result['match_id_selfie'],
+                'match_passport_selfie': face_result['match_passport_selfie'],
+                'match_id_passport': face_result['match_id_passport'],
+                'details': face_result['details']
+            },
+            'liveness_details': {
+                'is_live': is_live
+            }
         })
+
     except Exception as e:
-        logger.error(f"Face verification error: {str(e)}", exc_info=True)
+        logger.error(f"Verification error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': RESPONSE_MESSAGES['FACE_MATCH_FAILED'].format(str(e))
         }), 500
+
     finally:
         # Clean up uploaded files
-        
-        cleanup_temp_files(saved_paths)
+        cleanup_temp_files(list(saved_paths.values()))
 
 @app.route('/extract_passport', methods=['POST'])
 def extract_passport():

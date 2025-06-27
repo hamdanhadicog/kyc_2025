@@ -1,101 +1,121 @@
 from deepface import DeepFace
+from typing import Dict, Optional, List
 import logging
-from typing import List, Tuple, Optional
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from utils import pdf_to_image, is_valid_pdf, is_image_file
 import os
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
 class FaceVerifier:
 
-    def verify_faces(self, images_list: List[str]) -> bool:
-        if len(images_list) < 2:
-            logger.warning("At least two images are required for verification.")
-            return False
+    def verify_faces(
+        self,
+        id_image: str,
+        passport_image: str,
+        selfie_image: str
+    ) -> Dict:
+        """
+        Verifies if all images contain the same person by comparing:
+        - Selfie vs ID
+        - Selfie vs Passport
+        - ID vs Passport
+
+        Returns a dictionary with detailed results.
+        """
+
+        temp_files = []
+        results = {
+            'match_id_selfie': False,
+            'match_passport_selfie': False,
+            'match_id_passport': False,
+            'all_match': False,
+            'details': {}
+        }
 
         try:
-            # Convert PDFs to images and validate input files
-            processed_images = []
-            temp_files = []
+            # Process each image
+            id_path = self._process_image(id_image, temp_files)
+            passport_path = self._process_image(passport_image, temp_files)
+            selfie_path = self._process_image(selfie_image, temp_files)
 
-            for img_path in images_list:
-                if is_valid_pdf(img_path):
-                    converted_img = pdf_to_image(img_path)
-                    if not converted_img or not os.path.exists(converted_img):
-                        logger.error(f"Failed to convert PDF: {img_path}")
-                        return False
-                    processed_images.append(converted_img)
-                    temp_files.append(converted_img)
-                elif is_image_file(img_path):
-                    processed_images.append(img_path)
-                else:
-                    logger.error(f"Unsupported file: {img_path}")
-                    return False
-                
-            # Generate all unique pairs
-            n = len(processed_images)
-            pairs = []
-            for i in range(n):
-                for j in range(i + 1, n):
-                    pair = (processed_images[i], processed_images[j])
-                    pairs.append(pair)
+            if not all([id_path, passport_path, selfie_path]):
+                raise ValueError("One or more images could not be processed.")
 
-            # Run comparisons in parallel
-            threshold = 70  # Adjust based on model used
-            model_name = 'Facenet512'
-            results = self._run_parallel_verification(pairs, model_name, threshold)
+            # Compare selfie with ID
+            logger.info(f"Comparing ID ({id_path}) and Selfie ({selfie_path})")
+            res_id_selfie = self._compare_images(id_path, selfie_path)
+            results['match_id_selfie'] = res_id_selfie['verified']
 
-            # Check if any pair failed
-            if not all(results):
-                self._cleanup_temp_files(temp_files)
-                return False
+            # Compare selfie with Passport
+            logger.info(f"Comparing Passport ({passport_path}) and Selfie ({selfie_path})")
+            res_passport_selfie = self._compare_images(passport_path, selfie_path)
+            results['match_passport_selfie'] = res_passport_selfie['verified']
 
-            self._cleanup_temp_files(temp_files)
-            return True
+            # Compare ID with Passport
+            logger.info(f"Comparing ID ({id_path}) and Passport ({passport_path})")
+            res_id_passport = self._compare_images(id_path, passport_path)
+            results['match_id_passport'] = res_id_passport['verified']
 
-        except Exception as e:
-            logger.error(f"Error during verification: {e}", exc_info=True)
-            return False
+            # Check if all comparisons say "verified"
+            results['all_match'] = (
+                res_id_selfie['verified'] and 
+                res_passport_selfie['verified'] and 
+                res_id_passport['verified']
+            )
 
-    def _run_parallel_verification(self, pairs: List[Tuple[str, str]], model_name: str, threshold: float) -> List[bool]:
-        """Runs face verification for all image pairs in parallel."""
-        
-        with ProcessPoolExecutor() as executor:
-            futures = [
-                executor.submit(self._compare_pair, img1, img2, model_name, threshold)
-                for img1, img2 in pairs
-            ]
-
-            results = []
-            for future in as_completed(futures):
-                result = future.result()
-                results.append(result)
-                if not result:
-                    # Optional: cancel remaining tasks early
-                    pass  # Not shown here for simplicity
+            # Add detailed comparison info
+            results['details'] = {
+                'id_selfie_comparison': res_id_selfie,
+                'passport_selfie_comparison': res_passport_selfie,
+                'id_passport_comparison': res_id_passport
+            }
 
             return results
 
-    @staticmethod
-    def _compare_pair(img1: str, img2: str, model_name: str, threshold: float) -> bool:
-        
-        """Compare a single pair of images."""
-        logger = logging.getLogger(__name__)
-        logger.info(f"Comparing {img1} and {img2}")
-
-        try:
-            
-            emb1 = DeepFace.represent(img_path=img1, model_name=model_name, enforce_detection=False)
-            emb2 = DeepFace.represent(img_path=img2, model_name=model_name, enforce_detection=False)
-            dist = np.linalg.norm(np.array(emb1[0]["embedding"]) - np.array(emb2[0]["embedding"]))
-            logger.info(f"Distance between {img1} and {img2}: {dist:.2f}")
-            return dist <= threshold
-
         except Exception as e:
-            logger.error(f"Error comparing {img1} and {img2}: {e}")
-            return False
+            logger.error(f"Face verification error: {str(e)}", exc_info=True)
+            return {
+                'error': str(e),
+                'match_id_selfie': False,
+                'match_passport_selfie': False,
+                'match_id_passport': False,
+                'all_match': False,
+                'details': {}
+            }
+        finally:
+            self._cleanup_temp_files(temp_files)
+
+    def _process_image(self, image_path: str, temp_files: list) -> Optional[str]:
+        """Process an image path. If it's a PDF, convert it."""
+        if is_valid_pdf(image_path):
+            converted_img = pdf_to_image(image_path)
+            if not converted_img or not os.path.exists(converted_img):
+                logger.error(f"PDF conversion failed: {image_path}")
+                return None
+            temp_files.append(converted_img)
+            return converted_img
+        elif is_image_file(image_path):
+            return image_path
+        else:
+            logger.error(f"Unsupported file format: {image_path}")
+            return None
+
+    def _compare_images(self, img1: str, img2: str) -> Dict:
+        """Compare two images using DeepFace."""
+        result = DeepFace.verify(
+            img1_path=img1,
+            img2_path=img2,
+            detector_backend='retinaface',
+            model_name='Facenet512',
+            enforce_detection=False
+        )
+        return {
+            'image1': img1,
+            'image2': img2,
+            'distance': result['distance'],
+            
+            'verified': result['verified']
+        }
 
     def _cleanup_temp_files(self, file_paths: List[str]):
         from utils import cleanup_temp_files

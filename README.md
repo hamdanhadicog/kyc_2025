@@ -55,29 +55,91 @@ python app.py
 Server will run at `http://localhost:5000`
 
 ## API Endpoints
-### 1. Face Verification
+### 1. Face Verification for id,passport, and selfie. And Live Verification
 Verify if multiple images/PDFs belong to the same person
 
 ```python
+#Verify faces pro
+# verify_faces_client.py
+
 import requests
 
+# Configuration
 BASE_URL = "http://localhost:5000"
-image_paths = ["image1.jpg", "image2.pdf", "image3.pdf"]
 
-files = [("images", open(path, "rb")) for path in image_paths]
-response = requests.post(f"{BASE_URL}/verify_faces", files=files)
+# Paths to your local files
+file_paths = {
+    'id_image': "p12_id.jpeg",
+    'passport_image': "p12_passport.png",
+    'selfie_image': "p12_selfie.jpeg",
+    'video': "p12_video.mp4"
+}
 
-# Close files
-for f in files:
-    f[1].close()
-    
-print(response.json())
+# Open files and prepare them for upload
+files = []
+opened_files = []  # To keep track for closing later
+
+try:
+    for field_name, path in file_paths.items():
+        try:
+            f = open(path, "rb")
+            opened_files.append(f)
+            files.append((field_name, f))
+        except Exception as e:
+            print(f"Error opening file {path}: {e}")
+            raise
+
+    # Make the POST request
+    response = requests.post(
+        f"{BASE_URL}/verify_faces",
+        files=files
+    )
+
+    # Parse and print result
+    result = response.json()
+    print("Status Code:", response.status_code)
+    print("Response:", result)
+
+finally:
+    # Close all opened files
+    for f in opened_files:
+        f.close()
 ```
 
 **Sample Response:**
 ```json
 {
-  "result": true
+  "all_documents_match": false,
+  "face_verification_details": {
+    "details": {
+      "id_passport_comparison": {
+        "distance": 0.2719492087883397,
+        "image1": "5f0e733a5ef24908a61c00c6b04e3437.jpeg",
+        "image2": "994180bef5c047dd8af49c7661d5b3ad.png",
+        "verified": true
+      },
+      "id_selfie_comparison": {
+        "distance": 0.47056027626642327,
+        "image1": "5f0e733a5ef24908a61c00c6b04e3437.jpeg",
+        "image2": "01b89e6a4d30499397a112668a1b57b3.jpeg",
+        "verified": false
+      },
+      "passport_selfie_comparison": {
+        "distance": 0.49172486685194416,
+        "image1": "994180bef5c047dd8af49c7661d5b3ad.png",
+        "image2": "01b89e6a4d30499397a112668a1b57b3.jpeg",
+        "verified": false
+      }
+    },
+    "match_id_passport": false,
+    "match_id_selfie": false,
+    "match_passport_selfie": false
+  },
+  "liveness_details": {
+    "is_live": false
+  },
+  "liveness_verified": false,
+  "success": true
 }
 ```
 

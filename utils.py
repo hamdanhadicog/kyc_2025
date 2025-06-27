@@ -64,7 +64,7 @@ def is_image_file(filepath):
     ext = os.path.splitext(filepath)[1].lower()
     if ext == '.pdf':
         return True
-    return imghdr.what(filepath) in ['jpeg', 'png']
+    return imghdr.what(filepath) in ['jpeg', 'png','jpg']
 
 def is_video_file(filepath):
     """Check if file is a valid video by MIME type and frame count."""
