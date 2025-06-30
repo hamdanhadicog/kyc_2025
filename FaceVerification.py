@@ -6,6 +6,8 @@ import os
 
 logger = logging.getLogger(__name__)
 
+threshold=0.4
+
 class FaceVerifier:
 
     def verify_faces(
@@ -107,14 +109,17 @@ class FaceVerifier:
             img2_path=img2,
             detector_backend='retinaface',
             model_name='Facenet512',
-            enforce_detection=False
+            enforce_detection=False,
+            
         )
+
+        verified = result['distance'] <= threshold
+
         return {
             'image1': img1,
             'image2': img2,
-            'distance': result['distance'],
-            
-            'verified': result['verified']
+            'distance': result['distance'],   
+            'verified': verified
         }
 
     def _cleanup_temp_files(self, file_paths: List[str]):
