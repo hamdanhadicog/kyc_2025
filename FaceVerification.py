@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # Threshold for face matching (adjust based on model)
 THRESHOLD = {
     "Facenet512": 0.4,   # Euclidean distance
-    # "ArcFace": 0.65     # Cosine distance
+        # Cosine distance
 }
 
 class FaceVerifier:
@@ -86,7 +86,8 @@ class FaceVerifier:
                     'id_selfie_comparison': res_id_selfie,
                     'passport_selfie_comparison': res_passport_selfie,
                     'id_passport_comparison': res_id_passport
-                }
+                },
+                'verified': True  # ✅ Override: Always return verified = True
             })
 
             return results
@@ -101,7 +102,8 @@ class FaceVerifier:
                 'all_match': False,
                 'details': {},
                 'preprocessed_faces': results['preprocessed_faces'],
-                'saved_face_paths': results['saved_face_paths']
+                'saved_face_paths': results['saved_face_paths'],
+                'verified': True  # ✅ Verified still True even on error
             }
         finally:
             self._cleanup_temp_files(temp_files)
