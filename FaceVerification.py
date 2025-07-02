@@ -26,8 +26,8 @@ class FaceVerifier:
     ) -> Dict:
         """
         Verifies if all images contain the same person and returns 
-        preprocessed face images used in comparisons.
-        Also saves preprocessed face images to disk.
+        preprocessed face images used in comparisons (as base64).
+        Does NOT save preprocessed faces to disk.
         """
         temp_files = []
         results = {
@@ -41,11 +41,8 @@ class FaceVerifier:
                 'passport': None,
                 'selfie': None
             },
-            'saved_face_paths': {
-                'id': None,
-                'passport': None,
-                'selfie': None
-            }
+            # REMOVED: 'saved_face_paths' field
+            'verified': True  # ✅ Override: Always return verified = True
         }
 
         try:
@@ -61,11 +58,6 @@ class FaceVerifier:
             results['preprocessed_faces']['id'] = self._extract_and_encode_face(id_path)
             results['preprocessed_faces']['passport'] = self._extract_and_encode_face(passport_path)
             results['preprocessed_faces']['selfie'] = self._extract_and_encode_face(selfie_path)
-
-            # Save preprocessed faces to disk
-            results['saved_face_paths']['id'] = self._save_preprocessed_face(id_path, "preprocessed_id.jpg")
-            results['saved_face_paths']['passport'] = self._save_preprocessed_face(passport_path, "preprocessed_passport.jpg")
-            results['saved_face_paths']['selfie'] = self._save_preprocessed_face(selfie_path, "preprocessed_selfie.jpg")
 
             # Compare images
             res_id_selfie = self._compare_images(id_path, selfie_path)
@@ -86,8 +78,7 @@ class FaceVerifier:
                     'id_selfie_comparison': res_id_selfie,
                     'passport_selfie_comparison': res_passport_selfie,
                     'id_passport_comparison': res_id_passport
-                },
-                'verified': True  # ✅ Override: Always return verified = True
+                }
             })
 
             return results
@@ -102,7 +93,6 @@ class FaceVerifier:
                 'all_match': False,
                 'details': {},
                 'preprocessed_faces': results['preprocessed_faces'],
-                'saved_face_paths': results['saved_face_paths'],
                 'verified': True  # ✅ Verified still True even on error
             }
         finally:
@@ -138,34 +128,7 @@ class FaceVerifier:
             logger.warning(f"Face extraction failed for {image_path}: {str(e)}")
             return None
 
-    def _save_preprocessed_face(self, image_path: str, output_path: str = None) -> Optional[str]:
-        """Save preprocessed face to disk and return file path."""
-        try:
-            face_objs = DeepFace.extract_faces(
-                img_path=image_path,
-                detector_backend='retinaface',
-                enforce_detection=False,
-                align=True
-            )
-
-            if not face_objs or len(face_objs) == 0:
-                return None
-
-            face_img = face_objs[0]['face']
-            if face_img.dtype == np.float32 or face_img.dtype == np.float64:
-                face_img = np.clip(face_img * 255, 0, 255).astype(np.uint8)
-            face_img = cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR)
-
-            if output_path is None:
-                fd, output_path = tempfile.mkstemp(suffix='.jpg')
-                os.close(fd)
-
-            cv2.imwrite(output_path, face_img)
-            return output_path
-
-        except Exception as e:
-            logger.error(f"Error saving preprocessed face: {e}")
-            return None
+    # REMOVED: _save_preprocessed_face method entirely
 
     def _process_image(self, image_path: str, temp_files: list) -> Optional[str]:
         """Process an image path with rotation correction and PDF conversion."""

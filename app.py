@@ -73,24 +73,29 @@ def verify_faces():
                 'error': f"Face verification failed: {face_result['error']}"
             }), 500
 
-        # Step 2: Liveness Check on Video
+        # Step 2: Enhanced Liveness Check on Video
         lv = LiveVideo()
         video_path = saved_paths['video']
-        is_live = lv.detect_head_movement(video_path)
-
+        liveness_result = lv.detect_head_movement(
+            video_path, 
+            saved_paths['selfie_image']
+        )
+        
         # Construct final result
         return jsonify({
             'success': True,
             'all_documents_match': face_result['all_match'],
-            'liveness_verified': is_live,
+            'liveness_details': {
+                'head_movement_detected': liveness_result['head_movement_detected'],
+                'head_rotation_detected': liveness_result['head_rotation_detected'],
+                'smile_detected': liveness_result['smile_detected'],
+                'face_match': liveness_result['face_match']
+            },
             'face_verification_details': {
                 'match_id_selfie': face_result['match_id_selfie'],
                 'match_passport_selfie': face_result['match_passport_selfie'],
                 'match_id_passport': face_result['match_id_passport'],
                 'details': face_result['details']
-            },
-            'liveness_details': {
-                'is_live': is_live
             }
         })
 

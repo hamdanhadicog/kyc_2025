@@ -126,39 +126,20 @@ def is_valid_pdf(filepath):
         logger.error(f"Error validating PDF file {filepath}: {str(e)}")
         return False
 
+# utils.py (partial update)
 def cleanup_temp_files(file_paths):
-    """
-    Clean up temporary files and their associated rotated/preprocessed versions.
-    
-    Args:
-        file_paths: List of file paths to clean up
-    """
     try:
         for path in file_paths:
             if os.path.exists(path):
                 os.remove(path)
-                logger.info(f"Cleaned up file: {path}")
             
-            # Clean up rotated versions
-            base_path = os.path.splitext(path)[0]
-            for angle in [0, 90, 180, 270]:
-                rotated_path = f"{base_path}_rotated_{angle}.jpg"
-                if os.path.exists(rotated_path):
-                    os.remove(rotated_path)
-                    logger.info(f"Cleaned up rotated file: {rotated_path}")
-            
-            # Clean up preprocessed versions
-            preprocessed_path = f"{base_path}_preprocessed.jpg"
-            if os.path.exists(preprocessed_path):
-                os.remove(preprocessed_path)
-                logger.info(f"Cleaned up preprocessed file: {preprocessed_path}")
-            
-            # Clean up PDF conversion files
-            if path.endswith('.pdf'):
-                converted_path = f"{path}_page1.jpg"
-                if os.path.exists(converted_path):
-                    os.remove(converted_path)
-                    logger.info(f"Cleaned up PDF conversion file: {converted_path}")
+            # Clean up temporary face images from video processing
+            if "temp_face_" in path:
+                os.remove(path)
+                
+        # Clean up all temporary face images
+        for temp_face in glob.glob("temp_face_*.jpg"):
+            os.remove(temp_face)
     except Exception as e:
         logger.error(f"Error during cleanup: {str(e)}")
 
