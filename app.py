@@ -84,7 +84,8 @@ def verify_faces():
         # Construct final result
         return jsonify({
             'success': True,
-            'all_documents_match': face_result['all_match'],
+            'same_person': face_result['same_person'],  # New field
+            'all_documents_match': face_result['same_person'],  # Alias for backward compatibility
             'liveness_details': {
                 'head_movement_detected': liveness_result['head_movement_detected'],
                 'head_rotation_detected': liveness_result['head_rotation_detected'],
@@ -95,6 +96,7 @@ def verify_faces():
                 'match_id_selfie': face_result['match_id_selfie'],
                 'match_passport_selfie': face_result['match_passport_selfie'],
                 'match_id_passport': face_result['match_id_passport'],
+                'same_person': face_result['same_person'],  # Also include here
                 'details': face_result['details']
             }
         })

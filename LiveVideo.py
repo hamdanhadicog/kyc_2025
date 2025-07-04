@@ -4,6 +4,15 @@ import numpy as np
 from deepface import DeepFace
 
 class LiveVideo:
+    def __init__(self):
+        # Load Haar cascades for face and smile detection
+        self.face_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        )
+        self.smile_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + 'haarcascade_smile.xml'
+        )
+    
     def detect_head_movement(self, video_path, selfie_image_path):
         # Initialize MediaPipe solutions
         mp_face_mesh = mp.solutions.face_mesh
@@ -23,15 +32,10 @@ class LiveVideo:
         right_movement = False
         up_movement = False
         down_movement = False
-        smile_detected = False
+        smile_detected = False  # Will be set to True immediately when smile is detected
         face_match = False
         frame_count = 0
         max_frames = 300
-        
-        # Smile detection parameters - ADJUST THESE TO CONTROL SENSITIVITY
-        min_smile_frames = 15       # Reduce to make detection faster
-        consecutive_smile_frames = 0
-        smile_threshold = 0.15      # Increase to make detection more sensitive
         
         # For head rotation detection
         prev_yaw = None
@@ -82,24 +86,6 @@ class LiveVideo:
                     if nose_y > initial_nose_y + movement_threshold:
                         down_movement = True
                 
-                # Smile detection using Mouth Aspect Ratio (MAR)
-                mar = self.calculate_mouth_aspect_ratio(landmarks, img_w, img_h)
-                
-                # Only count as smile if MAR exceeds threshold (lower MAR = smile)
-                # ADJUST THE THRESHOLD HERE TO CONTROL SENSITIVITY
-                if mar==0.0:
-                    mar=30
-                
-                if mar < smile_threshold:  # Lower MAR indicates smile
-                    consecutive_smile_frames += 1
-                else:
-                    # Reset counter when not smiling
-                    consecutive_smile_frames = max(0, consecutive_smile_frames - 1)
-                
-                # Only count as smile if detected in sufficient consecutive frames
-                if consecutive_smile_frames >= min_smile_frames:
-                    smile_detected = True
-                
                 # Head rotation detection using 3D pose estimation
                 rotation = self.estimate_head_pose(landmarks, img_w, img_h)
                 if rotation is not None:
@@ -113,7 +99,28 @@ class LiveVideo:
                             head_rotated = True
                         prev_yaw = yaw
             
-            # Face matching every 10 frames to reduce processing
+            # SMILE DETECTION USING HAAR CASCADES (every frame)
+            if not smile_detected:  # Only check if we haven't detected a smile yet
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+                
+                for (x, y, w, h) in faces:
+                    roi_gray = gray[y:y+h, x:x+w]
+                    roi_color = frame[y:y+h, x:x+w]
+                    
+                    # Detect smiles in the face ROI
+                    smiles = self.smile_cascade.detectMultiScale(
+                        roi_gray, 
+                        scaleFactor=1.8, 
+                        minNeighbors=20,
+                        minSize=(25, 25))
+                    
+                    # If any smile is detected, mark it immediately
+                    if len(smiles) > 0:
+                        smile_detected = True
+                        break  # No need to check other faces
+            
+            # Face matching every 30 frames to reduce processing
             if frame_count % 30 == 0 and results.multi_face_landmarks:
                 try:
                     # Extract face region
@@ -139,6 +146,10 @@ class LiveVideo:
                     print(f"Face matching error: {str(e)}")
             
             frame_count += 1
+            
+            # Early exit if we've already detected everything we need
+            if smile_detected and face_match and head_rotated and (left_movement or right_movement):
+                break
         
         cap.release()
         
@@ -151,45 +162,6 @@ class LiveVideo:
             'smile_detected': smile_detected,
             'face_match': face_match
         }
-    
-    def calculate_mouth_aspect_ratio(self, landmarks, img_w, img_h):
-        """
-        Calculate Mouth Aspect Ratio (MAR) based on:
-        p1, p2 = mouth corners
-        p3, p4 = upper and lower lip centers
-        
-        MAR = (vertical distance) / (horizontal distance between corners)
-        Lower MAR indicates smile
-        """
-        # Define mouth landmark indices
-        # Mouth corners
-        p1 = 61  # Left corner
-        p2 = 291  # Right corner
-        
-        # Lip centers
-        p3 = 13  # Upper lip center
-        p4 = 14  # Lower lip center
-        
-        # Convert landmarks to pixel coordinates
-        points = {}
-        for idx in [p1, p2, p3, p4]:
-            landmark = landmarks[idx]
-            points[idx] = (int(landmark.x * img_w), int(landmark.y * img_h))
-        
-        # Calculate horizontal distance between corners
-        horizontal_dist = np.linalg.norm(np.array(points[p1]) - np.array(points[p2]))
-        
-        # Calculate vertical distance between lip centers
-        vertical_dist = np.linalg.norm(np.array(points[p3]) - np.array(points[p4]))
-        
-        # Avoid division by zero
-        if horizontal_dist < 1:
-            return 1.0  # High MAR = not smiling
-        
-        # Calculate MAR
-        mar = vertical_dist / horizontal_dist
-        
-        return mar
     
     def estimate_head_pose(self, landmarks, img_w, img_h):
         """Estimate head rotation (yaw, pitch, roll) using facial landmarks"""
