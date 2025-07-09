@@ -2,17 +2,88 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from deepface import DeepFace
+import logging
+import os
+
+logger = logging.getLogger(__name__)
+
+# Initialize MediaPipe face detector
+mp_face_detection = mp.solutions.face_detection
+
+# Settings
+SMILE_THRESHOLD_FRAMES = 2
+SKIP_FRAMES = 3  # Process every Nth frame for speed
 
 class LiveVideo:
     def __init__(self):
-        # Load Haar cascades for face and smile detection
-        self.face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        )
-        self.smile_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_smile.xml'
-        )
+        self.face_detector = mp_face_detection.FaceDetection(min_detection_confidence=0.5)
     
+    def detect_smile_in_frame(self, face_crop):
+        """Detect if a face crop contains a smile using DeepFace."""
+        try:
+            # Convert BGR to RGB for DeepFace
+            face_crop_rgb = cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
+            analysis = DeepFace.analyze(
+                face_crop_rgb, 
+                actions=["emotion"], 
+                enforce_detection=False
+            )
+            emotion = analysis[0]["dominant_emotion"]
+            return emotion == "happy"
+        except Exception as e:
+            logger.error(f"Emotion detection failed: {str(e)}")
+            return False
+
+    def detect_smile_in_video(self, video_path):
+        """Detect smile in video using DeepFace emotion analysis."""
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            logger.error("Could not open video.")
+            return False
+
+        smile_count = 0
+        frame_count = 0
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            frame_count += 1
+            if frame_count % SKIP_FRAMES != 0:
+                continue  # Skip frames to save time
+
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = self.face_detector.process(rgb_frame)
+
+            if results.detections:
+                for detection in results.detections:
+                    bbox = detection.location_data.relative_bounding_box
+                    h, w, _ = frame.shape
+                    x, y, width, height = (
+                        int(bbox.xmin * w),
+                        int(bbox.ymin * h),
+                        int(bbox.width * w),
+                        int(bbox.height * h),
+                    )
+                    # Ensure coordinates are within frame bounds
+                    x, y = max(0, x), max(0, y)
+                    width = min(w - x, width)
+                    height = min(h - y, height)
+                    
+                    if width > 0 and height > 0:
+                        face_crop = frame[y:y + height, x:x + width]
+                        
+                        if self.detect_smile_in_frame(face_crop):
+                            smile_count += 1
+                            logger.info(f"Smile detected in frame {frame_count} (count: {smile_count})")
+                            if smile_count >= SMILE_THRESHOLD_FRAMES:
+                                cap.release()
+                                return True
+
+        cap.release()
+        return False
+
     def detect_head_movement(self, video_path, selfie_image_path):
         # Initialize MediaPipe solutions
         mp_face_mesh = mp.solutions.face_mesh
@@ -32,7 +103,7 @@ class LiveVideo:
         right_movement = False
         up_movement = False
         down_movement = False
-        smile_detected = False  # Will be set to True immediately when smile is detected
+        smile_detected = False
         face_match = False
         frame_count = 0
         max_frames = 300
@@ -50,6 +121,9 @@ class LiveVideo:
                 'smile_detected': False,
                 'face_match': False
             }
+        
+        # Use new DeepFace-based smile detection
+        smile_detected = self.detect_smile_in_video(video_path)
         
         while cap.isOpened() and frame_count < max_frames:
             success, frame = cap.read()
@@ -99,27 +173,6 @@ class LiveVideo:
                             head_rotated = True
                         prev_yaw = yaw
             
-            # SMILE DETECTION USING HAAR CASCADES (every frame)
-            if not smile_detected:  # Only check if we haven't detected a smile yet
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
-                
-                for (x, y, w, h) in faces:
-                    roi_gray = gray[y:y+h, x:x+w]
-                    roi_color = frame[y:y+h, x:x+w]
-                    
-                    # Detect smiles in the face ROI
-                    smiles = self.smile_cascade.detectMultiScale(
-                        roi_gray, 
-                        scaleFactor=1.8, 
-                        minNeighbors=20,
-                        minSize=(25, 25))
-                    
-                    # If any smile is detected, mark it immediately
-                    if len(smiles) > 0:
-                        smile_detected = True
-                        break  # No need to check other faces
-            
             # Face matching every 30 frames to reduce processing
             if frame_count % 30 == 0 and results.multi_face_landmarks:
                 try:
@@ -142,8 +195,12 @@ class LiveVideo:
                         
                         if result['distance'] <= 0.4:  # Same threshold as FaceVerifier
                             face_match = True
+                            
+                        # Cleanup temp file
+                        if os.path.exists(temp_face_path):
+                            os.remove(temp_face_path)
                 except Exception as e:
-                    print(f"Face matching error: {str(e)}")
+                    logger.error(f"Face matching error: {str(e)}")
             
             frame_count += 1
             
@@ -152,6 +209,7 @@ class LiveVideo:
                 break
         
         cap.release()
+        face_mesh.close()
         
         # Determine if any head movement occurred
         head_moved = left_movement or right_movement or up_movement or down_movement
