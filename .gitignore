@@ -1,12 +1,18 @@
-env
-__pycache__
-static
-testing_images
-preprocessed_mrz_0.jpg
-preprocessed_mrz_90.jpg
-preprocessed_mrz_180.jpg
-preprocessed_mrz_270.jpg
-test2.py
-test3.py
-test4.py
-testsmile.py
+# Ignore everything
+*
+
+# Allow specific files
+!app.py
+!requirements.txt
+!config.py
+!FaceVerification.py
+!LiveVideo.py
+!lipdetection.py
+!requirements.txt
+!ocr_passport.py
+!ocr_id.py
+!README.md
+
+# Allow specific directories and their contents
+!utils/
+!utils/**

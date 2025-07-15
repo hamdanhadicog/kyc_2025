@@ -1,89 +1,21 @@
 import cv2
 import mediapipe as mp
 import numpy as np
-from deepface import DeepFace
 import logging
 import os
-
-logger = logging.getLogger(__name__)
+from lipdetection import detect_speaking_in_video  # Import lip movement detection
+from deepface import DeepFace
 
 # Initialize MediaPipe face detector
 mp_face_detection = mp.solutions.face_detection
 
 # Settings
-SMILE_THRESHOLD_FRAMES = 2
 SKIP_FRAMES = 3  # Process every Nth frame for speed
 
 class LiveVideo:
     def __init__(self):
         self.face_detector = mp_face_detection.FaceDetection(min_detection_confidence=0.5)
     
-    def detect_smile_in_frame(self, face_crop):
-        """Detect if a face crop contains a smile using DeepFace."""
-        try:
-            # Convert BGR to RGB for DeepFace
-            face_crop_rgb = cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
-            analysis = DeepFace.analyze(
-                face_crop_rgb, 
-                actions=["emotion"], 
-                enforce_detection=False
-            )
-            emotion = analysis[0]["dominant_emotion"]
-            return emotion == "happy"
-        except Exception as e:
-            logger.error(f"Emotion detection failed: {str(e)}")
-            return False
-
-    def detect_smile_in_video(self, video_path):
-        """Detect smile in video using DeepFace emotion analysis."""
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            logger.error("Could not open video.")
-            return False
-
-        smile_count = 0
-        frame_count = 0
-
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            frame_count += 1
-            if frame_count % SKIP_FRAMES != 0:
-                continue  # Skip frames to save time
-
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = self.face_detector.process(rgb_frame)
-
-            if results.detections:
-                for detection in results.detections:
-                    bbox = detection.location_data.relative_bounding_box
-                    h, w, _ = frame.shape
-                    x, y, width, height = (
-                        int(bbox.xmin * w),
-                        int(bbox.ymin * h),
-                        int(bbox.width * w),
-                        int(bbox.height * h),
-                    )
-                    # Ensure coordinates are within frame bounds
-                    x, y = max(0, x), max(0, y)
-                    width = min(w - x, width)
-                    height = min(h - y, height)
-                    
-                    if width > 0 and height > 0:
-                        face_crop = frame[y:y + height, x:x + width]
-                        
-                        if self.detect_smile_in_frame(face_crop):
-                            smile_count += 1
-                            logger.info(f"Smile detected in frame {frame_count} (count: {smile_count})")
-                            if smile_count >= SMILE_THRESHOLD_FRAMES:
-                                cap.release()
-                                return True
-
-        cap.release()
-        return False
-
     def detect_head_movement(self, video_path, selfie_image_path):
         # Initialize MediaPipe solutions
         mp_face_mesh = mp.solutions.face_mesh
@@ -103,7 +35,6 @@ class LiveVideo:
         right_movement = False
         up_movement = False
         down_movement = False
-        smile_detected = False
         face_match = False
         frame_count = 0
         max_frames = 300
@@ -118,12 +49,12 @@ class LiveVideo:
             return {
                 'head_movement_detected': False,
                 'head_rotation_detected': False,
-                'smile_detected': False,
+                'lips_moving': False,  # Changed from smile_detected
                 'face_match': False
             }
         
-        # Use new DeepFace-based smile detection
-        smile_detected = self.detect_smile_in_video(video_path)
+        # Use lip movement detection from det2.py
+        lips_moving = detect_speaking_in_video(video_path)
         
         while cap.isOpened() and frame_count < max_frames:
             success, frame = cap.read()
@@ -200,12 +131,12 @@ class LiveVideo:
                         if os.path.exists(temp_face_path):
                             os.remove(temp_face_path)
                 except Exception as e:
-                    logger.error(f"Face matching error: {str(e)}")
+                    logging.error(f"Face matching error: {str(e)}")
             
             frame_count += 1
             
             # Early exit if we've already detected everything we need
-            if smile_detected and face_match and head_rotated and (left_movement or right_movement):
+            if face_match and head_rotated and (left_movement or right_movement):
                 break
         
         cap.release()
@@ -217,7 +148,7 @@ class LiveVideo:
         return {
             'head_movement_detected': head_moved,
             'head_rotation_detected': head_rotated,
-            'smile_detected': smile_detected,
+            'lips_moving': lips_moving,  # Changed from smile_detected
             'face_match': face_match
         }
     

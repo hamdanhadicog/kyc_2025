@@ -8,17 +8,33 @@ from ocr_passport import process_passport
 import logging
 from LiveVideo import LiveVideo
 from ocr_id import OcrId  # Make sure this matches the filename and class
-
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB limit
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["1 per minute"]  # Adjust based on your needs
+)
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify({
+        "success": False,
+        "error": "Rate limit exceeded. Try again in {} seconds.".format(int(e.description)),
+        "retry_after_seconds": int(e.description)
+    }), 429
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @app.route('/verify_faces', methods=['POST'])
+@limiter.limit("1 per minute")  # Stricter limit for this heavy endpoint
 def verify_faces():
     """
     Endpoint to verify if ID, Passport, Selfie are of the same person,
@@ -89,8 +105,8 @@ def verify_faces():
             'liveness_details': {
                 'head_movement_detected': liveness_result['head_movement_detected'],
                 'head_rotation_detected': liveness_result['head_rotation_detected'],
-                'smile_detected': liveness_result['smile_detected'],
-                'face_match': liveness_result['face_match']
+                'lips_moving': liveness_result['lips_moving'],  # Updated key
+                'match_selfie_video': liveness_result['face_match']
             },
             'face_verification_details': {
                 'match_id_selfie': face_result['match_id_selfie'],

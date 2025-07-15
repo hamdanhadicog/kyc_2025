@@ -22,6 +22,9 @@ git clone https://github.com/hamdanhadicog/kyc_2025
 cd kyc_2025
 ```
 
+## Limitations
+The flask function can be called only 1 time per 1 minute
+
 ### 2. Install Poppler
 **Windows**:  
 Download installer from [poppler.freedesktop.org](https://poppler.freedesktop.org/) and add to PATH
@@ -47,6 +50,10 @@ venv\Scripts\activate    # Windows
 ```bash
 pip install -r requirements.txt
 ```
+
+##If you are getting No module named flask_limiter install it in the following way:
+
+python -m pip install flask-limiter
 
 ## Running the API
 ```bash
