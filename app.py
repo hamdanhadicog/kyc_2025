@@ -10,6 +10,7 @@ from LiveVideo import LiveVideo
 from ocr_id import OcrId  # Make sure this matches the filename and class
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+import os
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -21,20 +22,24 @@ limiter = Limiter(
     default_limits=["1 per minute"]  # Adjust based on your needs
 )
 
-@app.errorhandler(429)
-def ratelimit_handler(e):
-    return jsonify({
-        "success": False,
-        "error": "Rate limit exceeded. Try again in {} seconds.".format(int(e.description)),
-        "retry_after_seconds": int(e.description)
-    }), 429
+app.rate_limit_exceeded_handler = lambda e: jsonify({
+    "success": False,
+    "error": "Rate limit exceeded. Try again in {} seconds.".format(int(e.description)),
+    "retry_after_seconds": int(e.description)
+}), 429
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+verifier = FaceVerifier()
+
+
+
+
 @app.route('/verify_faces', methods=['POST'])
-@limiter.limit("1 per minute")  # Stricter limit for this heavy endpoint
+@limiter.limit("3 per minute")  # Stricter limit for this heavy endpoint
 def verify_faces():
     """
     Endpoint to verify if ID, Passport, Selfie are of the same person,
@@ -76,7 +81,6 @@ def verify_faces():
             saved_paths[field_name] = file_path
 
         # Step 1: Face Verification
-        verifier = FaceVerifier()
         face_result = verifier.verify_faces(
             id_image=saved_paths['id_image'],
             passport_image=saved_paths['passport_image'],

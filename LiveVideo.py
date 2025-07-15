@@ -126,6 +126,9 @@ class LiveVideo:
                         
                         if result['distance'] <= 0.4:  # Same threshold as FaceVerifier
                             face_match = True
+                            if os.path.exists(temp_face_path):
+                                os.remove(temp_face_path)
+                            break
                             
                         # Cleanup temp file
                         if os.path.exists(temp_face_path):

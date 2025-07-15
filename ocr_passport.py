@@ -3,9 +3,7 @@ import cv2
 import re
 from datetime import datetime
 import logging
-import json
 import string
-import unicodedata
 from utils import rotate_image, cleanup_preprocessed_images
 from utils import pdf_to_image, is_valid_pdf
 import os
